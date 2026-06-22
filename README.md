@@ -31,13 +31,16 @@ Then open the notebooks and choose the `Time Optimal GRAPE` kernel.
   Curvature-based robustness optimization against Rabi-frequency fluctuations and a post-optimization Omega sensitivity scan.
 
 - `examples/stabilizer_readout/README.md`
-  Design notes for the future five-atom Rb-Cs stabilizer-readout notebook.
+  Hamiltonian notes for the three-atom and five-atom Rb-Cs stabilizer-readout examples.
 
 - `examples/stabilizer_readout/half_plaquet.ipynb`
   Manual three-atom half-plaquette Rb-Cs stabilizer-readout optimization with the Cs laser fixed off.
 
 - `examples/stabilizer_readout/single_plaquet.ipynb`
   Manual single-plaquette Rb-Cs stabilizer-readout optimization with six symmetry-reduced Hamiltonian blocks.
+
+- `examples/stabilizer_readout/rb_gaussian_stark_dictionary.ipynb`
+  ARC-based preprocessing notebook that converts Gaussian-beam position errors into the `omega_rb` and `rb_stark_shift` dictionary used by the single-plaquette robustness scan.
 
 ## Core Workflow
 
@@ -299,6 +302,42 @@ robust_result = RobustGrapeOptimizer(
 ```
 
 For `RobustGrapeOptimizer`, `result.fidelity` is the nominal fidelity at the optimized parameters. `result.infidelity` stores the robust optimizer cost, not simply `1 - result.fidelity`.
+
+Several independent curvature penalties can be optimized together with
+`MultiParameterRobustGrapeOptimizer`. Each `CurvaturePenalty` has its own
+finite-difference problem pair, step, and `eta`:
+
+```python
+robust_optimizer = MultiParameterRobustGrapeOptimizer(
+    nominal_problem=nominal_problem,
+    penalties=(
+        CurvaturePenalty(
+            name="omega",
+            plus_problem=omega_plus_problem,
+            minus_problem=omega_minus_problem,
+            settings=CurvatureRobustnessSettings(
+                eta=eta_omega,
+                finite_difference_step=relative_step,
+            ),
+        ),
+        CurvaturePenalty(
+            name="interaction",
+            plus_problem=interaction_plus_problem,
+            minus_problem=interaction_minus_problem,
+            settings=CurvatureRobustnessSettings(
+                eta=eta_interaction,
+                finite_difference_step=relative_step,
+            ),
+        ),
+    ),
+)
+robust_result = robust_optimizer.optimize(initial_parameters)
+```
+
+When parameters have different physical scales, construct the plus and minus
+problems with `parameter * (1 +/- relative_step)`. The resulting curvature is
+with respect to relative parameter error, so the penalty weights are not
+implicitly rescaled by the parameter units.
 
 To test a fixed profile against amplitude fluctuations:
 

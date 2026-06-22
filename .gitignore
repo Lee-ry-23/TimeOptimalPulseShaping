@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+.arc-data/
+examples/stabilizer_readout/.arc-data/
+examples/stabilizer_readout/.cache/
+examples/stabilizer_readout/.matplotlib-cache/

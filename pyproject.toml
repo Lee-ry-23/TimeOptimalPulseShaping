@@ -15,6 +15,13 @@ dependencies = [
   "jupyter>=1.0",
 ]
 
+[project.optional-dependencies]
+atom-physics = [
+  "ARC-Alkali-Rydberg-Calculator>=3.10",
+]
+verification = [
+  "qutip>=5.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
-

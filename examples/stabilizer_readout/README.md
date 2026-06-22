@@ -2,6 +2,23 @@
 
 This folder contains dual-species stabilizer-readout examples. The smaller half-plaquette case is described first because it uses the same physics as the five-atom plaquette with fewer symmetry classes.
 
+## Files
+
+- `half_plaquet.ipynb`: three-atom diagonal half-plaquette readout with the Cs drive locked off.
+- `single_plaquet.ipynb`: five-atom single-plaquette readout, time scan, population traces, and robustness diagnostics.
+- `rb_gaussian_stark_dictionary.ipynb`: ARC-based preprocessing notebook that computes `omega_stark_values.json` from Gaussian-beam intensity variations.
+- `two_plaquette/`: nine-atom, 128-sector forward validation of shaped and unshaped `Rb 2*pi -> Cs pi -> Rb 2*pi` sequences.
+
+The generated `omega_stark_values.json` is read by `single_plaquet.ipynb`. Its keys are displacements \(r/\sigma\), and each value is already normalized to GRAPE units:
+
+$$
+\omega_{\rm rb}=\frac{|\Omega_R(r)|}{|\Omega_R(0)|},
+\qquad
+\Delta_{\rm rb}=\frac{[\Delta_g(r)+\Delta_r(r)]-[\Delta_g(0)+\Delta_r(0)]}{|\Omega_R(0)|}.
+$$
+
+The preprocessing notebook fixes the single-photon detuning to \(\Delta/2\pi=2.3\,\mathrm{GHz}\), computes the center Stark shift as the reference, and subtracts that reference while scanning position.
+
 # Three-Atom Half-Plaquette Readout
 
 The half-plaquette geometry keeps only two diagonal Rb data atoms and the central Cs ancilla:
@@ -279,10 +296,11 @@ $$
 
 ## Interaction Parameters
 
-There are three interaction strengths:
+There are three interaction strengths and two differential AC Stark shifts:
 
 $$
-B_{\rm RbCs},\qquad B_e,\qquad B_d.
+B_{\rm RbCs},\qquad B_e,\qquad B_d,\qquad
+\Delta_{\rm Rb},\qquad \Delta_{\rm Cs}.
 $$
 
 Here:
@@ -290,17 +308,21 @@ Here:
 - \(B_{\rm RbCs}\) is the Rb-Cs Rydberg interaction;
 - \(B_e\) is the Rb-Rb nearest-neighbor edge interaction;
 - \(B_d\) is the Rb-Rb diagonal interaction.
+- \(\Delta_{\rm Rb}\) is the Rb differential AC Stark shift on \(|r\rangle_{\rm Rb}\);
+- \(\Delta_{\rm Cs}\) is the Cs differential AC Stark shift on \(|r\rangle_{\rm Cs}\).
 
 For a raw Rb Rydberg subset \(A\) and Cs state \(c\in\{1,r\}\), the diagonal interaction energy is
 
 $$
 E(A,c)
-= B_e N_e(A)
+= \Delta_{\rm Rb}|A|
++ B_e N_e(A)
 + B_d N_d(A)
++ \Delta_{\rm Cs}\mathbf{1}_{c=r}
 + B_{\rm RbCs}|A|\mathbf{1}_{c=r}.
 $$
 
-Here \(N_e(A)\) is the number of Rb edge pairs in \(A\), \(N_d(A)\) is the number of Rb diagonal pairs in \(A\), and \(\mathbf{1}_{c=r}\) is 1 only when Cs is in \(|r\rangle\).
+Here \(N_e(A)\) is the number of Rb edge pairs in \(A\), \(N_d(A)\) is the number of Rb diagonal pairs in \(A\), and \(\mathbf{1}_{c=r}\) is 1 only when Cs is in \(|r\rangle\). In the notebook, \(\Delta_{\rm Rb}\) and \(\Delta_{\rm Cs}\) are `rb_stark_shift` and `cs_stark_shift`.
 
 ## Symmetry-Reduced Block Bases
 
@@ -344,9 +366,11 @@ $$
 H_{\rm Cs}(k)=
 \begin{pmatrix}
 0 & \Omega_{\rm Cs}(k)e^{i\phi_{\rm Cs}(k)}/2\\
-\Omega_{\rm Cs}(k)e^{-i\phi_{\rm Cs}(k)}/2 & 0
+\Omega_{\rm Cs}(k)e^{-i\phi_{\rm Cs}(k)}/2 & \Delta_{\rm Cs}
 \end{pmatrix}.
 $$
+
+The Rb Stark shift contributes \(\Delta_{\rm Rb}N_{\rm Rb}\) to \(H_{\rm Rb}\). Equivalently, every reduced Rb basis state with \(n_R\) Rb Rydberg excitations receives the extra diagonal shift \(n_R\Delta_{\rm Rb}\).
 
 The derivatives are
 
@@ -425,16 +449,18 @@ H_{\rm Rb}^{(m1)}(k)
 =
 \begin{pmatrix}
 0 & \Omega_{\rm Rb}e^{i\phi_{\rm Rb}(k)}/2\\
-\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}(k)}/2 & 0
+\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}(k)}/2 & \Delta_{\rm Rb}
 \end{pmatrix}.
 $$
 
-The interaction contribution is diagonal:
+The Rb-Cs interaction contribution is diagonal:
 
 $$
-E_{G,c}=0,\qquad
-E_{R,c}=B_{\rm RbCs}\mathbf{1}_{c=r}.
+\Delta E_{G,c}=0,\qquad
+\Delta E_{R,c}=B_{\rm RbCs}\mathbf{1}_{c=r}.
 $$
+
+The \(\Delta_{\rm Rb}\) term is already included in \(H_{\rm Rb}^{(m1)}\).
 
 The target Cs state is \(|-\rangle_{\rm Cs}\), because the Rb parity is odd.
 
@@ -456,18 +482,12 @@ $$
 H_{\rm Rb}^{(m2e)}(k)=
 \begin{pmatrix}
 0 & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2 & 0\\
-\sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & 0 & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2\\
-0 & \sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & B_e
+\sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & \Delta_{\rm Rb} & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2\\
+0 & \sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & B_e+2\Delta_{\rm Rb}
 \end{pmatrix}.
 $$
 
-The Rb-Cs interaction adds
-
-$$
-0,\quad B_{\rm RbCs}\mathbf{1}_{c=r},\quad 2B_{\rm RbCs}\mathbf{1}_{c=r}
-$$
-
-to the diagonal entries for \(|G,c\rangle\), \(|W,c\rangle\), and \(|D_e,c\rangle\), respectively.
+The Rb-Cs interaction adds \(n_R B_{\rm RbCs}\mathbf{1}_{c=r}\), where \(n_R=(0,1,2)\) for \(|G,c\rangle\), \(|W,c\rangle\), and \(|D_e,c\rangle\), respectively. The \(\Delta_{\rm Rb}n_R\) and \(B_e\) terms are already included in \(H_{\rm Rb}^{(m2e)}\).
 
 The target Cs state is \(|+\rangle_{\rm Cs}\), because the Rb parity is even.
 
@@ -485,12 +505,12 @@ $$
 H_{\rm Rb}^{(m2d)}(k)=
 \begin{pmatrix}
 0 & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2 & 0\\
-\sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & 0 & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2\\
-0 & \sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & B_d
+\sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & \Delta_{\rm Rb} & \sqrt{2}\Omega_{\rm Rb}e^{i\phi_{\rm Rb}}/2\\
+0 & \sqrt{2}\Omega_{\rm Rb}e^{-i\phi_{\rm Rb}}/2 & B_d+2\Delta_{\rm Rb}
 \end{pmatrix}.
 $$
 
-The Rb-Cs diagonal shifts are again \(0\), \(B_{\rm RbCs}\mathbf{1}_{c=r}\), and \(2B_{\rm RbCs}\mathbf{1}_{c=r}\).
+The Rb-Cs diagonal shifts are again \(n_R B_{\rm RbCs}\mathbf{1}_{c=r}\), where \(n_R=(0,1,2)\). The \(\Delta_{\rm Rb}n_R\) and \(B_d\) terms are already included in \(H_{\rm Rb}^{(m2d)}\).
 
 The target Cs state is \(|+\rangle_{\rm Cs}\).
 
@@ -523,11 +543,11 @@ $$
 H_{\rm Rb}^{(m3)}=
 \begin{pmatrix}
 0 & v & \sqrt{2}v & 0 & 0 & 0\\
-v^* & 0 & 0 & \sqrt{2}v & 0 & 0\\
-\sqrt{2}v^* & 0 & 0 & v & \sqrt{2}v & 0\\
-0 & \sqrt{2}v^* & v^* & B_e & 0 & \sqrt{2}v\\
-0 & 0 & \sqrt{2}v^* & 0 & B_d & v\\
-0 & 0 & 0 & \sqrt{2}v^* & v^* & 2B_e+B_d
+v^* & \Delta_{\rm Rb} & 0 & \sqrt{2}v & 0 & 0\\
+\sqrt{2}v^* & 0 & \Delta_{\rm Rb} & v & \sqrt{2}v & 0\\
+0 & \sqrt{2}v^* & v^* & B_e+2\Delta_{\rm Rb} & 0 & \sqrt{2}v\\
+0 & 0 & \sqrt{2}v^* & 0 & B_d+2\Delta_{\rm Rb} & v\\
+0 & 0 & 0 & \sqrt{2}v^* & v^* & 2B_e+B_d+3\Delta_{\rm Rb}
 \end{pmatrix},
 $$
 
@@ -541,11 +561,11 @@ The diagonal Rb energies are
 
 $$
 E_G=0,\qquad
-E_{S_a}=0,\qquad
-E_{S_b}=0,\qquad
-E_{D_e}=B_e,\qquad
-E_{D_d}=B_d,\qquad
-E_T=2B_e+B_d.
+E_{S_a}=\Delta_{\rm Rb},\qquad
+E_{S_b}=\Delta_{\rm Rb},\qquad
+E_{D_e}=B_e+2\Delta_{\rm Rb},\qquad
+E_{D_d}=B_d+2\Delta_{\rm Rb},\qquad
+E_T=2B_e+B_d+3\Delta_{\rm Rb}.
 $$
 
 The Rb-Cs interaction adds
@@ -585,11 +605,11 @@ $$
 H_{\rm Rb}^{(m4)}=
 \begin{pmatrix}
 0 & 2v & 0 & 0 & 0 & 0\\
-2v^* & 0 & 2v & \sqrt{2}v & 0 & 0\\
-0 & 2v^* & B_e & 0 & 2v & 0\\
-0 & \sqrt{2}v^* & 0 & B_d & \sqrt{2}v & 0\\
-0 & 0 & 2v^* & \sqrt{2}v^* & 2B_e+B_d & 2v\\
-0 & 0 & 0 & 0 & 2v^* & 4B_e+2B_d
+2v^* & \Delta_{\rm Rb} & 2v & \sqrt{2}v & 0 & 0\\
+0 & 2v^* & B_e+2\Delta_{\rm Rb} & 0 & 2v & 0\\
+0 & \sqrt{2}v^* & 0 & B_d+2\Delta_{\rm Rb} & \sqrt{2}v & 0\\
+0 & 0 & 2v^* & \sqrt{2}v^* & 2B_e+B_d+3\Delta_{\rm Rb} & 2v\\
+0 & 0 & 0 & 0 & 2v^* & 4B_e+2B_d+4\Delta_{\rm Rb}
 \end{pmatrix}.
 $$
 
@@ -604,11 +624,11 @@ The diagonal Rb energies are:
 $$
 \begin{aligned}
 E_G &= 0,\\
-E_{W_1} &= 0,\\
-E_{D_e} &= B_e,\\
-E_{D_d} &= B_d,\\
-E_{W_3} &= 2B_e+B_d,\\
-E_Q &= 4B_e+2B_d.
+E_{W_1} &= \Delta_{\rm Rb},\\
+E_{D_e} &= B_e+2\Delta_{\rm Rb},\\
+E_{D_d} &= B_d+2\Delta_{\rm Rb},\\
+E_{W_3} &= 2B_e+B_d+3\Delta_{\rm Rb},\\
+E_Q &= 4B_e+2B_d+4\Delta_{\rm Rb}.
 \end{aligned}
 $$
 

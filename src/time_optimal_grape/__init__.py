@@ -5,7 +5,9 @@ from time_optimal_grape.optimization import GrapeOptimizer, GrapeProblem, Optimi
 from time_optimal_grape.population import PopulationTrace, trace_populations, trace_states
 from time_optimal_grape.results import OptimizationResult, TimeScanPoint
 from time_optimal_grape.robustness import (
+    CurvaturePenalty,
     CurvatureRobustnessSettings,
+    MultiParameterRobustGrapeOptimizer,
     RobustGrapeOptimizer,
     scan_parameter_sensitivity,
 )
@@ -32,10 +34,12 @@ __all__ = [
     "AveragePhaseGateFidelity",
     "ControlLayout",
     "ControlValues",
+    "CurvaturePenalty",
     "CurvatureRobustnessSettings",
     "GrapeOptimizer",
     "GrapeProblem",
     "ManualHamiltonianBlock",
+    "MultiParameterRobustGrapeOptimizer",
     "OptimizationResult",
     "OptimizerSettings",
     "PopulationTrace",

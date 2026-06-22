@@ -24,45 +24,70 @@ class CurvatureRobustnessSettings:
             )
 
 
-class RobustGrapeOptimizer:
+@dataclass(frozen=True)
+class CurvaturePenalty:
+    name: str
+    plus_problem: GrapeProblem
+    minus_problem: GrapeProblem
+    settings: CurvatureRobustnessSettings
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("CurvaturePenalty.name must not be empty.")
+
+
+class MultiParameterRobustGrapeOptimizer:
     def __init__(
         self,
         nominal_problem: GrapeProblem,
-        plus_problem: GrapeProblem,
-        minus_problem: GrapeProblem,
-        robustness_settings: CurvatureRobustnessSettings,
+        penalties: Sequence[CurvaturePenalty],
     ) -> None:
-        validate_compatible_problem_layouts(
-            nominal_problem=nominal_problem,
-            plus_problem=plus_problem,
-            minus_problem=minus_problem,
-        )
+        penalty_tuple = tuple(penalties)
+        if not penalty_tuple:
+            raise ValueError("At least one curvature penalty is required.")
+        penalty_names = tuple(penalty.name for penalty in penalty_tuple)
+        if len(set(penalty_names)) != len(penalty_names):
+            raise ValueError(f"Curvature penalty names must be unique, got {penalty_names}.")
+        for penalty in penalty_tuple:
+            validate_compatible_problem_layouts(
+                nominal_problem=nominal_problem,
+                plus_problem=penalty.plus_problem,
+                minus_problem=penalty.minus_problem,
+            )
         self.nominal_problem = nominal_problem
-        self.plus_problem = plus_problem
-        self.minus_problem = minus_problem
-        self.robustness_settings = robustness_settings
+        self.penalties = penalty_tuple
 
     def evaluate(self, parameters: RealVector) -> tuple[float, RealVector]:
-        nominal_fidelity, nominal_gradient = GrapeOptimizer(self.nominal_problem).evaluate_fidelity(parameters)
-        plus_fidelity, plus_gradient = GrapeOptimizer(self.plus_problem).evaluate_fidelity(parameters)
-        minus_fidelity, minus_gradient = GrapeOptimizer(self.minus_problem).evaluate_fidelity(parameters)
+        nominal_fidelity, nominal_gradient = GrapeOptimizer(
+            self.nominal_problem
+        ).evaluate_fidelity(parameters)
+        cost = 1.0 - nominal_fidelity
+        gradient = -nominal_gradient
 
-        step_squared = self.robustness_settings.finite_difference_step**2
-        curvature = (plus_fidelity - 2.0 * nominal_fidelity + minus_fidelity) / step_squared
-        curvature_gradient = (plus_gradient - 2.0 * nominal_gradient + minus_gradient) / step_squared
-        cost = 1.0 - nominal_fidelity - self.robustness_settings.eta * curvature
-        gradient = -nominal_gradient - self.robustness_settings.eta * curvature_gradient
+        for penalty in self.penalties:
+            plus_fidelity, plus_gradient = GrapeOptimizer(
+                penalty.plus_problem
+            ).evaluate_fidelity(parameters)
+            minus_fidelity, minus_gradient = GrapeOptimizer(
+                penalty.minus_problem
+            ).evaluate_fidelity(parameters)
+            step_squared = penalty.settings.finite_difference_step**2
+            curvature = (
+                plus_fidelity - 2.0 * nominal_fidelity + minus_fidelity
+            ) / step_squared
+            curvature_gradient = (
+                plus_gradient - 2.0 * nominal_gradient + minus_gradient
+            ) / step_squared
+            cost -= penalty.settings.eta * curvature
+            gradient -= penalty.settings.eta * curvature_gradient
+
         return float(cost), np.asarray(gradient, dtype=np.float64)
 
     def optimize(self, initial_parameters: RealVector) -> OptimizationResult:
-        raw_result, optimized_parameters = optimize_parameter_vector(
-            evaluate=self.evaluate,
+        return self.optimize_with_locked_parameters(
             initial_parameters=initial_parameters,
-            parameter_count=self.nominal_problem.control_layout.parameter_count,
             locked_parameter_indices=(),
-            optimizer_settings=self.nominal_problem.optimizer_settings,
         )
-        return self.build_result(raw_result=raw_result, optimized_parameters=optimized_parameters)
 
     def optimize_with_locked_parameters(
         self,
@@ -76,11 +101,20 @@ class RobustGrapeOptimizer:
             locked_parameter_indices=locked_parameter_indices,
             optimizer_settings=self.nominal_problem.optimizer_settings,
         )
-        return self.build_result(raw_result=raw_result, optimized_parameters=optimized_parameters)
+        return self.build_result(
+            raw_result=raw_result,
+            optimized_parameters=optimized_parameters,
+        )
 
-    def build_result(self, raw_result: OptimizeResult, optimized_parameters: RealVector) -> OptimizationResult:
+    def build_result(
+        self,
+        raw_result: OptimizeResult,
+        optimized_parameters: RealVector,
+    ) -> OptimizationResult:
         cost, _gradient = self.evaluate(optimized_parameters)
-        nominal_fidelity, _nominal_gradient = GrapeOptimizer(self.nominal_problem).evaluate_fidelity(optimized_parameters)
+        nominal_fidelity, _nominal_gradient = GrapeOptimizer(
+            self.nominal_problem
+        ).evaluate_fidelity(optimized_parameters)
         return OptimizationResult(
             parameters=np.asarray(optimized_parameters, dtype=np.float64),
             fidelity=nominal_fidelity,
@@ -89,6 +123,53 @@ class RobustGrapeOptimizer:
             message=str(raw_result.message),
             iterations=int(raw_result.nit),
             raw_result=raw_result,
+        )
+
+
+class RobustGrapeOptimizer:
+    def __init__(
+        self,
+        nominal_problem: GrapeProblem,
+        plus_problem: GrapeProblem,
+        minus_problem: GrapeProblem,
+        robustness_settings: CurvatureRobustnessSettings,
+    ) -> None:
+        self.nominal_problem = nominal_problem
+        self.plus_problem = plus_problem
+        self.minus_problem = minus_problem
+        self.robustness_settings = robustness_settings
+        self._optimizer = MultiParameterRobustGrapeOptimizer(
+            nominal_problem=nominal_problem,
+            penalties=(
+                CurvaturePenalty(
+                    name="parameter",
+                    plus_problem=plus_problem,
+                    minus_problem=minus_problem,
+                    settings=robustness_settings,
+                ),
+            ),
+        )
+
+    def evaluate(self, parameters: RealVector) -> tuple[float, RealVector]:
+        return self._optimizer.evaluate(parameters)
+
+    def optimize(self, initial_parameters: RealVector) -> OptimizationResult:
+        return self._optimizer.optimize(initial_parameters=initial_parameters)
+
+    def optimize_with_locked_parameters(
+        self,
+        initial_parameters: RealVector,
+        locked_parameter_indices: Sequence[int],
+    ) -> OptimizationResult:
+        return self._optimizer.optimize_with_locked_parameters(
+            initial_parameters=initial_parameters,
+            locked_parameter_indices=locked_parameter_indices,
+        )
+
+    def build_result(self, raw_result: OptimizeResult, optimized_parameters: RealVector) -> OptimizationResult:
+        return self._optimizer.build_result(
+            raw_result=raw_result,
+            optimized_parameters=optimized_parameters,
         )
 
 
