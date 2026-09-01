@@ -21,6 +21,7 @@ class Geometry(NamedTuple):
     rb_count: int
     cs_count: int
     rb_cs_pairs: tuple[AtomPair, ...]
+    rb_cs_next_nearest_pairs: tuple[AtomPair, ...]
     cs_rb_neighbors: tuple[tuple[int, ...], ...]
     rb_nearest_pairs: tuple[AtomPair, ...]
 
@@ -37,6 +38,7 @@ class Parameters(NamedTuple):
     omega_rb: float
     omega_cs: float
     b_rb_cs: float
+    b_rb_cs_next_nearest: float
     b_rb_nearest: float
 
 
@@ -74,6 +76,7 @@ def six_cs_geometry() -> Geometry:
             (5, 4),
             (5, 5),
         ),
+        rb_cs_next_nearest_pairs=(),
         cs_rb_neighbors=((0,), (0, 1, 3), (1, 2, 4), (2,), (3, 5), (4, 5)),
         rb_nearest_pairs=((0, 3), (1, 3), (1, 4), (2, 4), (3, 5), (4, 5)),
     )
@@ -88,9 +91,12 @@ def validate_geometry(geometry: Geometry) -> None:
         raise ValueError(
             f"Expected {geometry.cs_count} Cs neighbor lists, got {len(geometry.cs_rb_neighbors)}."
         )
-    for rb_vertex, cs_vertex in geometry.rb_cs_pairs:
+    for rb_vertex, cs_vertex in geometry.rb_cs_pairs + geometry.rb_cs_next_nearest_pairs:
         if rb_vertex not in range(geometry.rb_count) or cs_vertex not in range(geometry.cs_count):
             raise ValueError(f"Invalid Rb-Cs pair {(rb_vertex, cs_vertex)} for {geometry}.")
+    duplicated_rb_cs_pairs = set(geometry.rb_cs_pairs).intersection(geometry.rb_cs_next_nearest_pairs)
+    if duplicated_rb_cs_pairs:
+        raise ValueError(f"Rb-Cs pair cannot be both nearest and next-nearest: {sorted(duplicated_rb_cs_pairs)}.")
     for first_rb, second_rb in geometry.rb_nearest_pairs:
         invalid_pair = (
             first_rb == second_rb
@@ -116,6 +122,7 @@ def validate_parameters(parameters: Parameters) -> None:
         ("omega_rb", parameters.omega_rb),
         ("omega_cs", parameters.omega_cs),
         ("b_rb_cs", parameters.b_rb_cs),
+        ("b_rb_cs_next_nearest", parameters.b_rb_cs_next_nearest),
         ("b_rb_nearest", parameters.b_rb_nearest),
     )
     for name, value in values:
@@ -171,6 +178,7 @@ def parameters_for_profile(profile: PulseProfile) -> Parameters:
         omega_rb=profile.reference_omega_rb,
         omega_cs=2.0 * profile.reference_omega_rb,
         b_rb_cs=10.0 * profile.omega0,
+        b_rb_cs_next_nearest=0.08 * profile.omega0,
         b_rb_nearest=0.1 * profile.omega0,
     )
 
@@ -226,6 +234,13 @@ def interaction_diagonal(
             cs_bit = 1 << (active_rb_count + cs_vertex)
             if basis_index & rb_bit and basis_index & cs_bit:
                 energy += parameters.b_rb_cs
+        for rb_vertex, cs_vertex in geometry.rb_cs_next_nearest_pairs:
+            if rb_vertex not in rb_qubit_by_vertex:
+                continue
+            rb_bit = 1 << rb_qubit_by_vertex[rb_vertex]
+            cs_bit = 1 << (active_rb_count + cs_vertex)
+            if basis_index & rb_bit and basis_index & cs_bit:
+                energy += parameters.b_rb_cs_next_nearest
         diagonal[basis_index] = energy
     return diagonal
 

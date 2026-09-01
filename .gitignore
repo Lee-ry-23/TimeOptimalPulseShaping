@@ -7,6 +7,7 @@ dist/
 build/
 *.egg-info/
 .arc-data/
+.mpl-cache/
 examples/stabilizer_readout/.arc-data/
 examples/stabilizer_readout/.cache/
 examples/stabilizer_readout/.matplotlib-cache/

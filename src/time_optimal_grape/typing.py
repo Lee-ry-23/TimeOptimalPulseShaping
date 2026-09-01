@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 
 ComplexMatrix = NDArray[np.complex128]
 ComplexVector = NDArray[np.complex128]
+RealMatrix = NDArray[np.float64]
 RealVector = NDArray[np.float64]
 
 
